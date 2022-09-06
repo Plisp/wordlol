@@ -11,33 +11,35 @@
   (with-open-file (g "guesses.txt")
     (concatenate 'simple-vector words (read-file-lines g))))
 
-(defparameter first-guess (coerce "alist" 'simple-base-string))
+(defparameter first-guess (coerce "salet" 'simple-base-string))
 
-(defun colors (word guess result greens)
+(defun colors (word guess result matched)
   (declare (optimize speed)
            (type simple-base-string word guess result)
-           (type (simple-array boolean) greens))
+           (type (simple-array boolean) matched))
   (fill result #\b)
   (loop for i fixnum below 5
         do (when (char= (schar word i)
                         (schar guess i))
-             (setf (aref greens i) t
+             (setf (aref matched i) t
                    (aref result i) #\g)))
 
   (loop for gi below 5
         for c = (schar guess gi)
-        do (when (and (not (aref greens gi))
+        do (when (and (not (aref matched gi))
                       (loop for wi below 5
-                            thereis (and (char= c (schar word wi))
-                                         (not (aref greens wi)))))
+                            when (and (char= c (schar word wi))
+                                      (not (aref matched wi)))
+                              do (setf (aref matched wi) t)
+                                 (return t)))
              (setf (aref result gi) #\o)))
-  (fill greens nil)
+  (fill matched nil)
   result)
 
-(defun guess (candidates colors greens)
+(defun guess (candidates colors matched)
   (declare (optimize speed)
            (type simple-base-string colors)
-           (type (simple-array boolean) greens)
+           (type (simple-array boolean) matched)
            (type simple-vector candidates guesslist))
   (loop initially (when (<= (length candidates) 2)
                     (setf best-guess (aref candidates 0))
@@ -47,7 +49,7 @@
         for guess across guesslist ;; too many. Which guesses are bad
         do (let ((hash (make-hash-table :test #'equal)))
              (loop for word across candidates
-                   do (colors word guess colors greens)
+                   do (colors word guess colors matched)
                       (let ((colors (copy-seq colors)))
                         (if (gethash colors hash)
                             (incf (gethash colors hash))
@@ -67,16 +69,16 @@
         with remaining simple-vector = (copy-seq words)
         with answer-colors = (make-array 5 :element-type 'base-char)
         with colors = (make-array 5 :element-type 'base-char)
-        with greens = (make-array 5 :element-type 'boolean :initial-element nil)
-        for guess = first-guess then (guess remaining colors greens)
+        with matched = (make-array 5 :element-type 'boolean :initial-element nil)
+        for guess = first-guess then (guess remaining colors matched)
         do (push guess guesses)
-           (colors answer guess answer-colors greens)
+           (colors answer guess answer-colors matched)
            (when (string= answer-colors "ggggg")
              (return-from play (print (nreverse guesses))))
            (loop with count = 0
                  for index from 0 below (length remaining)
                  do (let ((word (aref remaining index)))
-                      (colors word guess colors greens)
+                      (colors word guess colors matched)
                       (when (string= answer-colors colors)
                         (setf (aref remaining count) word)
                         (incf count)))
